@@ -1,0 +1,56 @@
+name: Build Huawei Y3 CRO-U00 zImage (Container Era)
+
+on:
+  workflow_dispatch: # Allows manual trigger via a button on GitHub
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-zimage:
+    # Uses the latest modern GitHub runner infrastructure
+    runs-on: ubuntu-latest 
+
+    # Runs all steps inside a legacy container matching the 2015-2016 Android era
+    container:
+      image: ubuntu:16.04
+
+    steps:
+      - name: Install Missing Container Bootstraps
+        run: |
+          apt-get update
+          apt-get install -y git git-core curl ccache
+
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+
+      - name: Install Legacy Essential Dependencies
+        run: |
+          apt-get update
+          apt-get install -y bc build-essential libncurses5-dev libssl-dev flex bison libelf-dev libxml2-utils LZMA xz-utils
+
+      - name: Setup Legacy GCC 4.9 Toolchain
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone --depth=1 https://googlesource.com toolchain
+
+      - name: Compile zImage
+        run: |
+          export ARCH=arm
+          export CROSS_COMPILE=$GITHUB_WORKSPACE/toolchain/bin/arm-linux-androideabi-
+          
+          # Replace 'cairo_defconfig' with your actual defconfig name if it differs
+          if [ -f arch/arm/configs/cairo_defconfig ]; then
+            make cairo_defconfig
+          elif [ -f arch/arm/configs/cro_u00_defconfig ]; then
+            make cro_u00_defconfig
+          else
+            make mt6580_defconfig
+          fi
+          
+          make -j$(nproc) zImage
+
+      - name: Upload Finished zImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: CRO-U00-zImage
+          path: arch/arm/boot/zImage
