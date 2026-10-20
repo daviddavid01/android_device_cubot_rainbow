@@ -1,42 +1,52 @@
-name: Build Huawei Y3 CRO-U00 zImage (Fixed Container)
+name: Build Huawei Y3 CRO-U00 zImage (All Steps in Container)
 
 on:
-  workflow_dispatch: # Allows manual trigger via a button on GitHub
+  workflow_dispatch:
   push:
     branches: [ main, master ]
 
 jobs:
-  build-zimage:
-    runs-on: ubuntu-24.04 # Use standard host runner to prevent execution crashes
+  build-kernel:
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Kernel Source
-        uses: actions/checkout@v4 # Safely checks out code outside the broken container runtime
+        uses: actions/checkout@v4
 
-      - name: Compile Inside Vintage Environment
+      - name: Run Full Pipeline inside Vintage Environment
         run: |
-          # Use docker run directly to isolate ONLY the compilation step
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:16.04 bash -c "
-            # 1. Update and install compilation tools inside the environment
-            apt-get update && apt-get install -y bc build-essential libncurses5-dev libssl-dev flex bison libelf-dev libxml2-utils lzma xz-utils git
+            echo '==================================================='
+            echo 'STEP 1: Installing Vintage Era Dependencies'
+            echo '==================================================='
+            apt-get update
+            apt-get install -y bc build-essential libncurses5-dev libssl-dev flex bison libelf-dev libxml2-utils lzma xz-utils git
 
-            # 2. Grab the specific toolchain needed for MediaTek 3.18.19
-            git clone --depth=1 https://googlesource.com toolchain
+            echo '==================================================='
+            echo 'STEP 2: Clonging Legacy GCC 4.9 Toolchain'
+            echo '==================================================='
+            git clone --depth=1 https://googlesource.com /workspace/toolchain
 
-            # 3. Setup compiler flags
+            echo '==================================================='
+            echo 'STEP 3: Configuring Environment & Defconfig'
+            echo '==================================================='
             export ARCH=arm
             export CROSS_COMPILE=/workspace/toolchain/bin/arm-linux-androideabi-
 
-            # 4. Process configuration file
             if [ -f arch/arm/configs/cairo_defconfig ]; then
+              echo 'Found cairo_defconfig'
               make cairo_defconfig
             elif [ -f arch/arm/configs/cro_u00_defconfig ]; then
+              echo 'Found cro_u00_defconfig'
               make cro_u00_defconfig
             else
+              echo 'Falling back to mt6580_defconfig'
               make mt6580_defconfig
             fi
 
-            # 5. Compile the target binary
+            echo '==================================================='
+            echo 'STEP 4: Compiling zImage Kernel Binary'
+            echo '==================================================='
             make -j\$(nproc) zImage
           "
 
