@@ -1,52 +1,58 @@
-name: Build Huawei Y3 CRO-U00 zImage (All Steps in Container)
+name: Build Huawei Y3 CRO-U00 zImage (Fixed Architecture)
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, los-14.1 ]
 
 jobs:
   build-kernel:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout Kernel Source
+      # Step 1 stays here to cleanly read your build configuration file
+      - name: Checkout Device Tree Configs
         uses: actions/checkout@v4
 
-      - name: Run Full Pipeline inside Vintage Environment
+      - name: Fetch and Build Actual Kernel Source Code
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:16.04 bash -c "
             echo '==================================================='
-            echo 'STEP 1: Installing Vintage Era Dependencies'
+            echo 'STEP 1: Installing Vintage Dependencies'
             echo '==================================================='
             apt-get update
             apt-get install -y bc build-essential libncurses5-dev libssl-dev flex bison libelf-dev libxml2-utils lzma xz-utils git
 
             echo '==================================================='
-            echo 'STEP 2: Clonging Legacy GCC 4.9 Toolchain'
+            echo 'STEP 2: Cloning the ACTUAL Kernel Source Repository'
             echo '==================================================='
+            # We are cloning the actual MT6580 3.18.19 Kernel Source code into a folder named /workspace/source
+            git clone --depth=1 https://github.com /workspace/source
+
+            echo '==================================================='
+            echo 'STEP 3: Cloning Correct Legacy Toolchain'
+            echo '==================================================='
+            # Fixed the broken link from your previous log
             git clone --depth=1 https://googlesource.com /workspace/toolchain
 
             echo '==================================================='
-            echo 'STEP 3: Configuring Environment & Defconfig'
+            echo 'STEP 4: Compiling inside the Kernel directory'
             echo '==================================================='
+            cd /workspace/source
+            
             export ARCH=arm
             export CROSS_COMPILE=/workspace/toolchain/bin/arm-linux-androideabi-
 
+            # Apply defconfig configuration command directly onto source
             if [ -f arch/arm/configs/cairo_defconfig ]; then
-              echo 'Found cairo_defconfig'
               make cairo_defconfig
             elif [ -f arch/arm/configs/cro_u00_defconfig ]; then
-              echo 'Found cro_u00_defconfig'
               make cro_u00_defconfig
             else
-              echo 'Falling back to mt6580_defconfig'
               make mt6580_defconfig
             fi
 
-            echo '==================================================='
-            echo 'STEP 4: Compiling zImage Kernel Binary'
-            echo '==================================================='
+            # Build the zImage binary code file
             make -j\$(nproc) zImage
           "
 
@@ -54,4 +60,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CRO-U00-zImage
-          path: arch/arm/boot/zImage
+          path: source/arch/arm/boot/zImage
